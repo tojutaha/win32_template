@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <vector>
 #include <assert.h>
 #include <GL/GL.h>
 
@@ -25,6 +26,11 @@
 
 #define WindowWidth 1024
 #define WindowHeight 768
+#define QuadSize 4
+int NumQuadsX = WindowWidth / QuadSize;
+int NumQuadsY = WindowHeight / QuadSize;
+GLfloat QuadSizeX = 2.0f / NumQuadsX;
+GLfloat QuadSizeY = 2.0f / NumQuadsY;
 
 static HDC GlobalOpenGLDC;
 static HGLRC GlobalOpenGLRC;
@@ -110,17 +116,20 @@ typedef GL_DEBUG_CALLBACK(GLDEBUGPROC);
 typedef void WINAPI gl_debug_message_callback_arb(GLDEBUGPROC callback, const void *userParam);
 static gl_debug_message_callback_arb *glDebugMessageCallbackARB;
 
-GLfloat Vertices[] = {
-    -0.5f, -0.5f,
-     0.5f, -0.5f,
-     0.0f,  0.5f
+struct VertexData
+{
+    GLfloat x, y;
+    GLfloat r, g, b;
 };
 
-GLfloat Colors[] = {
-    1.0f, 0.0f, 0.0f,
-    0.0f, 1.0f, 0.0f,
-    0.0f, 0.0f, 1.0f
+struct Color
+{
+    GLfloat r, g, b;
 };
+
+std::vector<std::vector<int>> Board(NumQuadsX, std::vector<int>(NumQuadsY, 0));
+std::vector<int> Indices;
+std::vector<VertexData> Vertices;
 
 #include "opengl.cpp"
 
@@ -364,41 +373,123 @@ Win32InitOpenGL()
 	{
 		assert(!"Uniform variable Projection was not found in the program");
 	}
+
+    for(int x = 0; x < NumQuadsX; ++x)
+    {
+        for(int y = 0; y <NumQuadsY; ++y)
+        {
+            GLuint QuadIndex = (x + y * NumQuadsX) * 6;
+            Indices.push_back(QuadIndex + 0);
+            Indices.push_back(QuadIndex + 1);
+            Indices.push_back(QuadIndex + 2);
+            Indices.push_back(QuadIndex + 3);
+            Indices.push_back(QuadIndex + 4);
+            Indices.push_back(QuadIndex + 5);
+        }
+    }
 }
 
 static void
-UpdateAndRender(GLuint VAO, GLuint VertexBuffer, GLuint ColorBuffer)
+RestartGame()
 {
+    for(int x = 0; x < NumQuadsX; ++x)
+    {
+        for(int y = 0; y < NumQuadsY; ++y)
+        {
+            Board[x][y] = rand() % 2;
+        }
+    }
+}
+
+static void
+UpdateAndRender(GLuint VAO, GLuint EBO, GLuint VertexBuffer)
+{
+    // Update
+    std::vector<std::vector<int>> NewBoard(NumQuadsX, std::vector<int>(NumQuadsY, 0));
+    for(int i = 1; i < NumQuadsX - 1; ++i)
+    {
+        for(int j = 1; j < NumQuadsY - 1; ++j)
+        {
+            int liveNeighbours = 0;
+            for(int x = -1; x <= 1; ++x)
+            {
+                for(int y = -1; y <= 1; ++y)
+                {
+                    liveNeighbours += Board[i + x][j + y];
+                }
+            }
+
+            liveNeighbours -= Board[i][j];
+            if((Board[i][j] == 1) && (liveNeighbours < 2))
+            {
+                NewBoard[i][j] = 0;
+            }
+            else if((Board[i][j] == 1) && (liveNeighbours > 3))
+            {
+                NewBoard[i][j] = 0;
+            }
+            else if((Board[i][j] == 0) && (liveNeighbours == 3))
+            {
+                NewBoard[i][j] = 1;
+            }
+            else
+            {
+                NewBoard[i][j] = Board[i][j];
+            }
+        }
+    }
+
+    Board = NewBoard;
+
+    // Render
+    Vertices.clear();
     glClear(GL_COLOR_BUFFER_BIT);
 
-	// Bind the VAO
-	glBindVertexArray(VAO);
+    for(int x = 0; x < NumQuadsX; ++x)
+    {
+        for(int y = 0; y < NumQuadsY; ++y)
+        {
+            GLfloat NormalizedX = -1.0f + x * QuadSizeX;
+            GLfloat NormalizedY = -1.0f + y * QuadSizeY;
+
+            Color color = {0.0f, 0.0f, 0.0f};
+            if(Board[x][y] == 1)
+            {
+                color = {0.0f, 1.0f, 0.0f};
+            }
+
+            VertexData vertexData;
+
+            //First triangle
+            vertexData = {NormalizedX, NormalizedY, color.r, color.g, color.b};
+            Vertices.push_back(vertexData);
+
+            vertexData = {NormalizedX + QuadSizeX, NormalizedY, color.r, color.g, color.b};
+            Vertices.push_back(vertexData);
+
+            vertexData = {NormalizedX, NormalizedY + QuadSizeY, color.r, color.g, color.b};
+            Vertices.push_back(vertexData);
+
+            // Second triangle
+            vertexData = {NormalizedX + QuadSizeX, NormalizedY, color.r, color.g, color.b};
+            Vertices.push_back(vertexData);
+
+            vertexData= {NormalizedX + QuadSizeX, NormalizedY + QuadSizeY, color.r, color.g, color.b};
+            Vertices.push_back(vertexData);
+
+            vertexData = {NormalizedX, NormalizedY + QuadSizeY, color.r, color.g, color.b};
+            Vertices.push_back(vertexData);
+        }
+    }
 
 	// Load the vertex data
-	glBindBuffer(GL_ARRAY_BUFFER, VertexBuffer);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, Vertices.size() * sizeof(VertexData), Vertices.data(), GL_DYNAMIC_DRAW);
 
-	// Set up vertex attribute for position
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    // Load the indices
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, Indices.size() * sizeof(GLuint), Indices.data(), GL_DYNAMIC_DRAW);
 
-	// Load the color data
-	glBindBuffer(GL_ARRAY_BUFFER, ColorBuffer);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(Colors), Colors, GL_DYNAMIC_DRAW);
-
-	// Set up vertex attribute for color
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-
-	// Draw the triangle
-	glDrawArrays(GL_TRIANGLES, 0, 3);
-
-	// Unbind the VAO
-	glBindVertexArray(0);
-
-	// Disable the vertex attributes
-	glDisableVertexAttribArray(0);
-	glDisableVertexAttribArray(1);
+	// Draw the quads
+	glDrawElements(GL_TRIANGLES, (GLsizei)Indices.size(), GL_UNSIGNED_INT, 0);
 
     SwapBuffers(GlobalOpenGLDC);
 }
@@ -414,6 +505,20 @@ Win32ProcessPendingMessages()
             case WM_QUIT:
             {
                 GlobalRunning = false;
+            } break;
+
+            case WM_SYSKEYDOWN:
+            case WM_SYSKEYUP:
+            case WM_KEYDOWN:
+            case WM_KEYUP:
+            {
+                int VKCode = (int)msg.wParam;
+
+                if(VKCode == 'R')
+                {
+                    RestartGame();
+                }
+
             } break;
             default:
             {
@@ -474,13 +579,15 @@ WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow)
 			GlobalOpenGLDC = GetDC(Window);
 			Win32InitOpenGL();
 			GLuint VertexBuffer;
-			GLuint ColorBuffer;
 			GLuint VAO;
-			OpenGLGenBuffers(&VAO, &VertexBuffer, &ColorBuffer);
+			GLuint EBO;
+			OpenGLGenBuffers(&VAO, &EBO, &VertexBuffer);
 
             ShowWindow(Window, nCmdShow);
 
             GlobalRunning = true;
+
+            RestartGame();
 
             while(GlobalRunning)
             {
@@ -492,11 +599,11 @@ WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow)
                 int Height = Rect.bottom - Rect.top;
                 glViewport(0, 0, Width, Height);
 
-                UpdateAndRender(VAO, VertexBuffer, ColorBuffer);
+                UpdateAndRender(VAO, EBO, VertexBuffer);
             }
 
 			glDeleteBuffers(1, &VertexBuffer);
-			glDeleteBuffers(1, &ColorBuffer);
+			glDeleteBuffers(1, &EBO);
 			glDeleteBuffers(1, &VAO);
 
             wglMakeCurrent(NULL, NULL);

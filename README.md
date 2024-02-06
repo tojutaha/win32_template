@@ -1,1 +1,3 @@
-Smol Win32/OpenGL template
+Win32/OpenGL template
+
+![alt text](image.gif "Demo")

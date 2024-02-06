@@ -1,4 +1,5 @@
 #define GL_ARRAY_BUFFER                   0x8892
+#define GL_ELEMENT_ARRAY_BUFFER           0x8893
 #define GL_STATIC_DRAW                    0x88E4
 #define GL_DYNAMIC_DRAW                   0x88E8
 #define GL_STREAM_DRAW                    0x88E0
@@ -27,25 +28,30 @@ GL_DEBUG_CALLBACK(OpenGLDebugCallback)
 }
 
 static void
-OpenGLGenBuffers(GLuint *VAO, GLuint *VertexBuffer, GLuint *ColorBuffer)
+OpenGLGenBuffers(GLuint *VAO, GLuint *EBO, GLuint *VertexBuffer)
 {
-    glGenBuffers(1, VertexBuffer);
-    glGenBuffers(1, ColorBuffer);
 	glGenVertexArrays(1, VAO);
+    glGenBuffers(1, VertexBuffer);
+    glGenBuffers(1, EBO);
 
 	glBindVertexArray(*VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, *VertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *)0);
+    glBufferData(GL_ARRAY_BUFFER, Vertices.size() * sizeof(VertexData), Vertices.data(), GL_STATIC_DRAW);
+
+    // Position Attribute
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void *)0);
 	glEnableVertexAttribArray(0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, *ColorBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Colors), Colors, GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *)0);
+    // Color Attribute
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void *)(2 * sizeof(GLfloat)));
 	glEnableVertexAttribArray(1);
 
-	glBindVertexArray(0);
+    // Element Buffer Object
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, Indices.size() * sizeof(GLuint), Indices.data(), GL_STATIC_DRAW);
+
+	//glBindVertexArray(0);
 
     GLenum	Error = glGetError();
     if (Error != GL_NO_ERROR)
