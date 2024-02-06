@@ -485,9 +485,6 @@ UpdateAndRender(GLuint VAO, GLuint EBO, GLuint VertexBuffer)
 	// Load the vertex data
 	glBufferData(GL_ARRAY_BUFFER, Vertices.size() * sizeof(VertexData), Vertices.data(), GL_DYNAMIC_DRAW);
 
-    // Load the indices
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, Indices.size() * sizeof(GLuint), Indices.data(), GL_DYNAMIC_DRAW);
-
 	// Draw the quads
 	glDrawElements(GL_TRIANGLES, (GLsizei)Indices.size(), GL_UNSIGNED_INT, 0);
 
